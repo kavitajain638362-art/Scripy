@@ -11,12 +11,13 @@ try:
     import pandas as pd
     import undetected_chromedriver as uc
     import cloudscraper
+    from curl_cffi import requests as curl_requests
     from bs4 import BeautifulSoup
 except ImportError as e:
     raise SystemExit(
         f"Missing dependency: {e}\n"
         "Please install requirements using:\n"
-        "pip install customtkinter pandas undetected-chromedriver cloudscraper beautifulsoup4"
+        "pip install customtkinter pandas undetected-chromedriver cloudscraper beautifulsoup4 curl_cffi"
     )
 
 # ==============================================================================
@@ -248,7 +249,10 @@ class ScripyApp(ctk.CTk):
         
         try:
             try:
-                driver = uc.Chrome(options=options)
+                try:
+                    driver = uc.Chrome(options=options, version_main=150)
+                except:
+                    driver = uc.Chrome(options=options, version_main=149)
             except Exception as e:
                 self.log("Failed to launch undetected_chromedriver. Forcing fallback...")
                 raise Exception("DriverInitFailed")
@@ -359,12 +363,17 @@ class ScripyApp(ctk.CTk):
 
         except Exception as e:
             self.log(f"Browser extraction failed/blocked: {str(e)}")
-            self.log("Activating Cloudscraper fallback mode...")
+            self.log("Activating Advanced TLS Fallback (curl_cffi)...")
             try:
-                scraper = cloudscraper.create_scraper(
-                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
-                )
-                html_response = scraper.get(target_url, timeout=20)
+                html_response = curl_requests.get(target_url, impersonate="chrome120", timeout=20)
+                
+                if html_response.status_code != 200:
+                    self.log(f"TLS Fallback returned {html_response.status_code}. Trying Cloudscraper...")
+                    scraper = cloudscraper.create_scraper(
+                        browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                    )
+                    html_response = scraper.get(target_url, timeout=20)
+                    
                 if html_response.status_code == 200:
                     soup = BeautifulSoup(html_response.text, "html.parser")
                     
