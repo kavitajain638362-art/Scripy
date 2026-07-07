@@ -9,16 +9,14 @@ import tkinter.messagebox as messagebox
 try:
     import customtkinter as ctk
     import pandas as pd
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.chrome.options import Options
-    from webdriver_manager.chrome import ChromeDriverManager
-    from selenium_stealth import stealth
+    import undetected_chromedriver as uc
+    import cloudscraper
+    from bs4 import BeautifulSoup
 except ImportError as e:
     raise SystemExit(
         f"Missing dependency: {e}\n"
         "Please install requirements using:\n"
-        "pip install customtkinter pandas selenium webdriver-manager selenium-stealth"
+        "pip install customtkinter pandas undetected-chromedriver cloudscraper beautifulsoup4"
     )
 
 # ==============================================================================
@@ -237,39 +235,23 @@ class ScripyApp(ctk.CTk):
     def run_dynamic_scraper(self, target_url: str):
         self.log("Launching background driver...")
         
-        options = Options()
+        options = uc.ChromeOptions()
         if self.headless_var.get():
             options.add_argument("--headless=new")
         options.add_argument("--incognito")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--log-level=3")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
         
         driver = None
         scraped_data = []
         
         try:
-            # Try Selenium 4.6+ built-in manager first (faster, less errors)
             try:
-                driver = webdriver.Chrome(options=options)
-            except Exception:
-                self.log("Falling back to webdriver-manager...")
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=options)
-            
-            # Stealth Injection
-            stealth(driver,
-                languages=["en-US", "en"],
-                vendor="Google Inc.",
-                platform="Win32",
-                webgl_vendor="Intel Inc.",
-                renderer="Intel Iris OpenGL Engine",
-                fix_hairline=True,
-            )
+                driver = uc.Chrome(options=options)
+            except Exception as e:
+                self.log("Failed to launch undetected_chromedriver. Forcing fallback...")
+                raise Exception("DriverInitFailed")
             
             self.log(f"Navigating to {target_url}...")
             driver.set_page_load_timeout(30)
@@ -373,10 +355,48 @@ class ScripyApp(ctk.CTk):
                 self.log(f"Extraction Complete! Collected {len(scraped_data)} records instantly.")
             else:
                 self.log("FATAL: Page is entirely blank, heavily protected, or contains zero valid links.")
+                raise Exception("No data extracted by Javascript")
 
         except Exception as e:
-            self.log(f"CRITICAL ERROR during extraction: {str(e)}")
-            traceback.print_exc()
+            self.log(f"Browser extraction failed/blocked: {str(e)}")
+            self.log("Activating Cloudscraper fallback mode...")
+            try:
+                scraper = cloudscraper.create_scraper(
+                    browser={'browser': 'chrome', 'platform': 'windows', 'desktop': True}
+                )
+                html_response = scraper.get(target_url, timeout=20)
+                if html_response.status_code == 200:
+                    soup = BeautifulSoup(html_response.text, "html.parser")
+                    
+                    # Fallback extraction logic
+                    for a in soup.find_all('a', href=True):
+                        href = a['href']
+                        if not href.startswith('http'):
+                            href = target_url.rstrip('/') + '/' + href.lstrip('/')
+                            
+                        text = a.get_text(strip=True) or "Extracted Link"
+                        if len(href) > 5 and len(text) > 2:
+                            scraped_data.append({
+                                "Type": "Static Fallback Data",
+                                "Title_or_Text": text[:200],
+                                "Price_or_Data": "N/A",
+                                "URL_Link": href,
+                                "Image_URL": "N/A"
+                            })
+                    
+                    # Deduplicate fallback data based on URL
+                    unique_data = {item["URL_Link"]: item for item in scraped_data}
+                    scraped_data = list(unique_data.values())
+                    
+                    if scraped_data:
+                        self.log(f"Fallback SUCCESS: Extracted {len(scraped_data)} links via static parsing.")
+                    else:
+                        self.log("Fallback FAILURE: No valid links could be extracted statically.")
+                else:
+                    self.log(f"Fallback blocked with status code: {html_response.status_code}")
+            except Exception as fb_err:
+                self.log(f"CRITICAL ERROR during fallback: {str(fb_err)}")
+                traceback.print_exc()
         finally:
             if driver:
                 self.log("Closing web driver...")
