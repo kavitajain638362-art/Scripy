@@ -239,10 +239,9 @@ class ScripyApp(ctk.CTk):
         options = ChromiumOptions()
         if self.headless_var.get():
             options.headless(True)
-        options.incognito()
-        options.set_argument('--disable-gpu')
         options.set_argument('--window-size=1920,1080')
         options.set_argument('--log-level=3')
+        options.set_argument('--no-sandbox')
         
         driver = None
         scraped_data = []
@@ -261,9 +260,12 @@ class ScripyApp(ctk.CTk):
             
             self.log("Scrolling to load dynamic content...")
             # Optimized Smart Scrolling
-            for _ in range(4):
-                driver.scroll.to_bottom()
-                time.sleep(1.5)
+            try:
+                for _ in range(4):
+                    driver.scroll.to_bottom()
+                    time.sleep(1.5)
+            except Exception as e:
+                self.log(f"Scroll warning (ignoring): {e}")
                     
             self.log("Extracting DOM via high-performance JavaScript pipeline...")
             
