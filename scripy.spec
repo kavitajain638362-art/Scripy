@@ -1,11 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+import os
+import customtkinter
+
+customtkinter_path = os.path.dirname(customtkinter.__file__)
+
 a = Analysis(
     ['scripy.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[(customtkinter_path, 'customtkinter/')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
