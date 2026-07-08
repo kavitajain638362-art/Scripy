@@ -9,11 +9,7 @@ import tkinter.messagebox as messagebox
 try:
     import customtkinter as ctk
     import pandas as pd
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.chrome.options import Options
-    from webdriver_manager.chrome import ChromeDriverManager
-    from selenium_stealth import stealth
+    from DrissionPage import ChromiumPage, ChromiumOptions
     import cloudscraper
     from curl_cffi import requests as curl_requests
     from bs4 import BeautifulSoup
@@ -21,7 +17,7 @@ except ImportError as e:
     raise SystemExit(
         f"Missing dependency: {e}\n"
         "Please install requirements using:\n"
-        "pip install customtkinter pandas selenium webdriver-manager selenium-stealth cloudscraper beautifulsoup4 curl_cffi"
+        "pip install customtkinter pandas DrissionPage cloudscraper beautifulsoup4 curl_cffi"
     )
 
 # ==============================================================================
@@ -240,43 +236,23 @@ class ScripyApp(ctk.CTk):
     def run_dynamic_scraper(self, target_url: str):
         self.log("Launching background driver...")
         
-        options = Options()
+        options = ChromiumOptions()
         if self.headless_var.get():
-            options.add_argument("--headless=new")
-        options.add_argument("--incognito")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--log-level=3")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
+            options.headless(True)
+        options.incognito()
+        options.set_argument('--disable-gpu')
+        options.set_argument('--window-size=1920,1080')
+        options.set_argument('--log-level=3')
         
         driver = None
         scraped_data = []
         
         try:
-            try:
-                driver = webdriver.Chrome(options=options)
-            except Exception:
-                self.log("Falling back to webdriver-manager...")
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=options)
-            
-            # Stealth Injection
-            stealth(driver,
-                languages=["en-US", "en"],
-                vendor="Google Inc.",
-                platform="Win32",
-                webgl_vendor="Intel Inc.",
-                renderer="Intel Iris OpenGL Engine",
-                fix_hairline=True,
-            )
+            driver = ChromiumPage(options)
             
             self.log(f"Navigating to {target_url}...")
-            driver.set_page_load_timeout(30)
-            
             try:
-                driver.get(target_url)
+                driver.get(target_url, timeout=30)
             except Exception as e:
                 self.log(f"Warning on page load: {e}")
             
@@ -285,14 +261,9 @@ class ScripyApp(ctk.CTk):
             
             self.log("Scrolling to load dynamic content...")
             # Optimized Smart Scrolling
-            last_height = driver.execute_script("return document.body.scrollHeight")
             for _ in range(4):
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                driver.scroll.to_bottom()
                 time.sleep(1.5)
-                new_height = driver.execute_script("return document.body.scrollHeight")
-                if new_height == last_height:
-                    break
-                last_height = new_height
                     
             self.log("Extracting DOM via high-performance JavaScript pipeline...")
             
@@ -368,7 +339,7 @@ class ScripyApp(ctk.CTk):
             })();
             """
             
-            scraped_data = driver.execute_script(js_extractor)
+            scraped_data = driver.run_js(js_extractor)
             
             if scraped_data:
                 self.log(f"Extraction Complete! Collected {len(scraped_data)} records instantly.")
