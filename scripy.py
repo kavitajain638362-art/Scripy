@@ -9,7 +9,11 @@ import tkinter.messagebox as messagebox
 try:
     import customtkinter as ctk
     import pandas as pd
-    import undetected_chromedriver as uc
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    from webdriver_manager.chrome import ChromeDriverManager
+    from selenium_stealth import stealth
     import cloudscraper
     from curl_cffi import requests as curl_requests
     from bs4 import BeautifulSoup
@@ -17,7 +21,7 @@ except ImportError as e:
     raise SystemExit(
         f"Missing dependency: {e}\n"
         "Please install requirements using:\n"
-        "pip install customtkinter pandas undetected-chromedriver cloudscraper beautifulsoup4 curl_cffi"
+        "pip install customtkinter pandas selenium webdriver-manager selenium-stealth cloudscraper beautifulsoup4 curl_cffi"
     )
 
 # ==============================================================================
@@ -236,26 +240,37 @@ class ScripyApp(ctk.CTk):
     def run_dynamic_scraper(self, target_url: str):
         self.log("Launching background driver...")
         
-        options = uc.ChromeOptions()
+        options = Options()
         if self.headless_var.get():
             options.add_argument("--headless=new")
         options.add_argument("--incognito")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--log-level=3")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
         
         driver = None
         scraped_data = []
         
         try:
             try:
-                try:
-                    driver = uc.Chrome(options=options, version_main=150)
-                except:
-                    driver = uc.Chrome(options=options, version_main=149)
-            except Exception as e:
-                self.log("Failed to launch undetected_chromedriver. Forcing fallback...")
-                raise Exception("DriverInitFailed")
+                driver = webdriver.Chrome(options=options)
+            except Exception:
+                self.log("Falling back to webdriver-manager...")
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=options)
+            
+            # Stealth Injection
+            stealth(driver,
+                languages=["en-US", "en"],
+                vendor="Google Inc.",
+                platform="Win32",
+                webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine",
+                fix_hairline=True,
+            )
             
             self.log(f"Navigating to {target_url}...")
             driver.set_page_load_timeout(30)
